@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FluoroLayout</title>
+  <style>
+    :root{--bg:#f4f6f8;--card:#fff;--ink:#17202a;--muted:#667085;--blue:#246bfd;--line:#d9dee7;--dark:#15181d}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);font:14px/1.45 "Microsoft YaHei",system-ui,sans-serif;color:var(--ink)}
+    header{height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:16px}
+    header h1{font-size:20px;margin:0} header span{color:var(--muted)}
+    main{display:grid;grid-template-columns:330px minmax(460px,1fr) 300px;gap:14px;padding:14px;height:calc(100vh - 64px)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;min-height:0;overflow:auto}
+    h2{font-size:15px;margin:0 0 12px} button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:8px 12px;cursor:pointer}
+    button:hover{border-color:#9eb9ff} button.primary{background:var(--blue);border-color:var(--blue);color:#fff} button.danger{color:#c9362b}
+    input[type=text],input[type=number]{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:5px}
+    label{display:block;color:#344054;margin:8px 0 4px}.group{border:1px solid var(--line);border-radius:7px;padding:10px;margin:7px 0;cursor:pointer}
+    .group.active{border:2px solid var(--blue);padding:9px}.group b{display:block;margin-bottom:3px}.group small{color:var(--muted)}
+    .row{display:flex;gap:7px;align-items:center}.row>*{flex:1}.actions{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
+    #stage{height:calc(100% - 70px);background:var(--dark);display:flex;align-items:center;justify-content:center;overflow:auto;border-radius:7px;position:relative}
+    #canvas{max-width:100%;max-height:100%;cursor:crosshair}.hint{color:var(--muted);margin:7px 0}.settings{display:grid;grid-template-columns:1fr 96px;gap:7px 9px;align-items:center}.settings label{margin:0}
+    .check{display:flex;gap:8px;align-items:center;margin:11px 0}.check input{width:auto}.footer{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);padding:5px 14px;color:var(--muted);font-size:12px}
+    select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:5px;background:#fff}.subhead{font-weight:700;margin:12px 0 7px}.order-item{display:grid;grid-template-columns:18px 12px 1fr 34px 34px;gap:5px;align-items:center;margin:5px 0;padding:5px 7px;border:1px solid var(--line);border-radius:6px}.order-item button{padding:4px}.order-item.off{opacity:.48}.order-item input[type=checkbox]{margin:0}.dot{width:10px;height:10px;border-radius:50%}.dot.green{background:#00962d}.dot.red{background:#dc1923}.dot.blue{background:#195ae1}.dot.brightfield{background:#8a7654}.dot.merge{background:#232323}.order-item input[type=text]{font-weight:700}
+    details{border:1px solid var(--line);border-radius:8px;margin:9px 0;background:#fbfcfe}summary{cursor:pointer;font-weight:700;padding:10px 11px;color:#25324a}details>div.section-body{padding:0 11px 11px}.section-note{font-size:12px;color:var(--muted);margin:3px 0 8px}
+    dialog{border:0;border-radius:10px;box-shadow:0 20px 60px #0004;width:min(620px,92vw);padding:20px}dialog::backdrop{background:#0006}
+    .fileline{display:grid;grid-template-columns:22px 105px 1fr;align-items:center;gap:9px;margin:9px 0}.fileline label{margin:0}.fileline input[type=checkbox]{width:16px;height:16px}
+    #fullPreview{position:fixed;inset:20px;background:#555d;z-index:10;display:none;align-items:center;justify-content:center;padding:24px}#fullPreview img{max-width:100%;max-height:100%;box-shadow:0 3px 24px #000}
+    @media(max-width:1000px){main{grid-template-columns:280px 1fr}.right{display:none}}
+  </style>
+</head>
+<body>
+<header><h1>FluoroLayout</h1><span>Immunofluorescence Figure Builder</span><button class="danger" style="margin-left:auto" onclick="exitApp()">退出软件</button></header>
+<main>
+  <section class="card"><h2>实验组</h2><div id="groups"></div><div class="actions"><button class="primary" onclick="openEditor()">＋ 添加</button><button onclick="editGroup()">编辑</button><button class="danger" onclick="removeGroup()">删除</button><button onclick="move(-1)">↑</button><button onclick="move(1)">↓</button></div></section>
+  <section class="card"><h2>框选预览</h2><div id="stage"><canvas id="canvas"></canvas></div><p class="hint">在图上按住鼠标拖动，框选需要局部放大的区域。</p></section>
+  <section class="card right"><h2>参数设置</h2>
+    <details open><summary>通道与版式</summary><div class="section-body">
+      <p class="section-note">勾选需要展示的通道；可修改名称并调整顺序。</p><div id="channelOrder"></div>
+      <label>排版方向</label><select id="layout_orientation"><option value="horizontal">横向：实验组为行</option><option value="vertical">纵向：实验组为列</option></select>
+      <label>局部放大显示</label><select id="zoom_mode"><option value="none">不显示局部放大图（默认）</option><option value="merge">仅显示 Merge 放大图</option><option value="all">显示所有已启用通道的放大图</option></select>
+      <label>局部放大图位置</label><select id="zoom_placement"><option value="separate">原图后独立放大面板</option><option value="top_right">各自通道图内：右上角</option><option value="bottom_right">各自通道图内：右下角</option><option value="top_left">各自通道图内：左上角</option><option value="bottom_left">各自通道图内：左下角</option></select>
+    </div></details>
+    <details open><summary>图像设置</summary><div class="section-body">
+      <div class="settings" id="imageSettings"></div>
+      <label>白框形状</label><select id="roi_shape"><option value="custom">自定义矩形（拖动绘制）</option><option value="square">固定尺寸正方形（点击定位）</option></select>
+      <label class="check"><input id="draw_roi" type="checkbox">在所有通道原图标出白框</label>
+      <label class="check"><input id="max_projection" type="checkbox" checked>多页 TIFF 最大投影</label>
+    </div></details>
+    <details><summary>字体与间距</summary><div class="section-body"><div class="settings" id="layoutSettings"></div><div class="settings" id="fontSettings"></div></div></details>
+    <details><summary>输出与比例尺</summary><div class="section-body"><label>比例尺标定方式</label><select id="calibration_mode"><option value="mpp">按 μm/px 标定</option><option value="field_width">按整图视野宽度 μm 标定</option></select><div class="settings" id="outputSettings"></div><p class="section-note">先选择一种标定方式，未选择的输入框会被禁用。TIFF 的 72 pixels/inch 只是显示/打印信息，不能用于显微物理标定。</p><label class="check"><input id="transparent_background" type="checkbox">画布背景透明</label><label class="check"><input id="show_scale_bar" type="checkbox">添加比例尺</label></div></details>
+    <div class="actions"><button class="primary" onclick="fullPreview()">整版预览</button><button onclick="download('tif')">导出 TIFF</button><button onclick="download('png')">导出 PNG</button><button onclick="download('svg')">导出 SVG</button></div>
+  </section>
+</main>
+<dialog id="editor"><h2 id="editorTitle">添加实验组</h2><label>实验组名称</label><input id="gname" type="text" placeholder="例如：Control">
+  <p class="hint">每个实验组独立勾选通道。未勾选通道在该组留空，其他组的版面位置不变。</p>
+  <div class="fileline"><input id="cblue" type="checkbox"><label>蓝色 / DAPI</label><input id="fblue" type="file" accept=".tif,.tiff,.png,.jpg,.jpeg"></div>
+  <div class="fileline"><input id="cgreen" type="checkbox"><label>绿色通道</label><input id="fgreen" type="file" accept=".tif,.tiff,.png,.jpg,.jpeg"></div>
+  <div class="fileline"><input id="cred" type="checkbox"><label>红色通道</label><input id="fred" type="file" accept=".tif,.tiff,.png,.jpg,.jpeg"></div>
+  <div class="fileline"><input id="cbrightfield" type="checkbox"><label>明场通道</label><input id="fbrightfield" type="file" accept=".tif,.tiff,.png,.jpg,.jpeg"></div>
+  <p class="hint">编辑时不重新选择文件，将保留原通道文件。</p><div class="actions"><button class="primary" onclick="saveEditor()">确定</button><button onclick="editor.close()">取消</button></div>
+</dialog>
+<div id="fullPreview" onclick="this.style.display='none'"><img id="fullImage"></div><div class="footer" id="status">图像仅在本机处理，不会上传互联网。</div>
+<script>
+const groups=[], settingsSpec=[
+ ['low_percentile','黑场百分位',0.2,'imageSettings'],['high_percentile','白场百分位',99.8,'imageSettings'],['gamma','Gamma',1,'imageSettings'],['roi_line_width','白框线宽 px',5,'imageSettings'],['square_size_px','正方形边长 px（0=按比例）',0,'imageSettings'],['square_size_fraction','边长/短边比例',0.35,'imageSettings'],['inset_fraction','角落放大图占比',0.38,'imageSettings'],
+ ['panel_width','单面板宽度 px',700,'layoutSettings'],['gap','列间距 px',30,'layoutSettings'],['row_gap','行间距 px',46,'layoutSettings'],
+ ['font_size','通道/组名字号 px',70,'fontSettings'],['group_label_width','名称栏宽度 px',250,'fontSettings'],
+ ['dpi','导出 DPI',600,'outputSettings'],['microns_per_pixel','标定 μm/px',0.325,'outputSettings'],['field_width_microns','整图视野宽度 μm','','outputSettings'],['scale_bar_microns','要显示的比例尺长度 μm',20,'outputSettings']
+];
+let channelOrder=['green','red','blue','brightfield','merge'];
+const channelNames={green:'Green',red:'Red',blue:'Blue',brightfield:'Brightfield',merge:'Merge'};
+const enabledChannels={green:true,red:true,blue:true,brightfield:false,merge:true};
+let selected=-1, editing=-1, previewImg=null, drag=null; const $=id=>document.getElementById(id), canvas=$('canvas'), ctx=canvas.getContext('2d'), editor=$('editor');
+for(const [id,label,value,section] of settingsSpec){const l=document.createElement('label');l.textContent=label;const i=document.createElement('input');i.id=id;i.type='number';i.step='any';i.value=value;if(['microns_per_pixel','field_width_microns','scale_bar_microns'].includes(id))i.min='0.0000001';$(section).append(l,i)}
+function status(s){$('status').textContent=s} function settings(){const o={};for(const [id,,v] of settingsSpec)o[id]=(Number.isInteger(v)?Math.round(+$(id).value):+$(id).value);o.draw_roi=$('draw_roi').checked;o.max_projection=$('max_projection').checked;o.show_scale_bar=$('show_scale_bar').checked;o.transparent_background=$('transparent_background').checked;o.calibration_mode=$('calibration_mode').value;o.layout_orientation=$('layout_orientation').value;o.zoom_mode=$('zoom_mode').value;o.zoom_placement=$('zoom_placement').value;o.roi_shape=$('roi_shape').value;o.channel_order=[...channelOrder];o.channel_names={...channelNames};o.enabled_channels={...enabledChannels};return o}
+function updateCalibrationMode(){const useField=$('calibration_mode').value==='field_width';$('microns_per_pixel').disabled=useField;$('field_width_microns').disabled=!useField;status(useField?'请输入大于 0 的整图视野宽度 μm':'当前使用 μm/px 标定')}
+function renderChannelOrder(){$('channelOrder').innerHTML='';channelOrder.forEach((c,i)=>{const d=document.createElement('div');d.className='order-item '+(enabledChannels[c]?'':'off');d.innerHTML=`<input type="checkbox" ${enabledChannels[c]?'checked':''} aria-label="启用通道" onchange="toggleChannel('${c}',this.checked)"><span class="dot ${c}"></span><input type="text" value="${escapeHtml(channelNames[c])}" aria-label="自定义通道名称" onchange="renameChannel('${c}',this.value)"><button title="上移" onclick="moveChannel(${i},-1)">↑</button><button title="下移" onclick="moveChannel(${i},1)">↓</button>`;$('channelOrder').append(d)})}
+function toggleChannel(c,checked){enabledChannels[c]=checked;renderChannelOrder();status((checked?'已启用：':'已隐藏：')+channelNames[c])}
+function renameChannel(c,value){channelNames[c]=value.trim()||({green:'Green',red:'Red',blue:'Blue',brightfield:'Brightfield',merge:'Merge'})[c];renderChannelOrder();status('通道名称已更新')}
+function moveChannel(i,delta){const n=i+delta;if(n<0||n>=channelOrder.length)return;[channelOrder[i],channelOrder[n]]=[channelOrder[n],channelOrder[i]];renderChannelOrder();status('通道顺序已更新')}
+function hasChannel(g,c){return !!g[c]&&(g.included_channels?.[c]??true)}
+function renderGroups(){ $('groups').innerHTML='';groups.forEach((g,i)=>{const d=document.createElement('div');d.className='group '+(i===selected?'active':'');d.onclick=()=>select(i);d.innerHTML=`<b>${escapeHtml(g.name)}</b><small>蓝 ${hasChannel(g,'blue')?'✓':'—'}　绿 ${hasChannel(g,'green')?'✓':'—'}　红 ${hasChannel(g,'red')?'✓':'—'}　明场 ${hasChannel(g,'brightfield')?'✓':'—'}</small>`;$('groups').append(d)});if(!groups.length)$('groups').innerHTML='<p class="hint">尚未添加实验组。</p>'}
+const escapeHtml=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function openEditor(i=-1){editing=i;$('editorTitle').textContent=i<0?'添加实验组':'编辑实验组';$('gname').value=i<0?'':groups[i].name;for(const c of ['blue','green','red','brightfield']){$('f'+c).value='';$('c'+c).checked=i<0?false:(groups[i].included_channels?.[c]??!!groups[i][c])}editor.showModal()}
+function editGroup(){if(selected>=0)openEditor(selected)}
+async function upload(file){if(!file)return '';status('正在导入 '+file.name+'…');const r=await fetch('/api/upload?filename='+encodeURIComponent(file.name),{method:'POST',body:file});const j=await r.json();if(!r.ok)throw Error(j.error||'上传失败');return j.token}
+async function saveEditor(){try{const name=$('gname').value.trim();if(!name)throw Error('请填写实验组名称');const base=editing>=0?{...groups[editing]}:{name,blue:'',green:'',red:'',brightfield:'',included_channels:{},roi:[.55,.1,.92,.47]};base.name=name;base.included_channels={};for(const c of ['blue','green','red','brightfield']){const f=$('f'+c).files[0];if(f)base[c]=await upload(f);base.included_channels[c]=$('c'+c).checked;if(base.included_channels[c]&&base[c])enabledChannels[c]=true}if(!['blue','green','red','brightfield'].some(c=>base.included_channels[c]&&base[c]))throw Error('请至少勾选并导入一个通道');if(editing<0){groups.push(base);selected=groups.length-1}else groups[editing]=base;editor.close();renderGroups();renderChannelOrder();await showSelected()}catch(e){alert(e.message);status(e.message)}}
+function removeGroup(){if(selected<0)return;if(confirm('删除“'+groups[selected].name+'”？')){groups.splice(selected,1);selected=Math.min(selected,groups.length-1);renderGroups();showSelected()}}
+function move(delta){if(selected<0)return;const n=selected+delta;if(n<0||n>=groups.length)return;[groups[selected],groups[n]]=[groups[n],groups[selected]];selected=n;renderGroups()}
+async function select(i){selected=i;renderGroups();await showSelected()}
+async function apiImage(path,data){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!r.ok){let j={};try{j=await r.json()}catch{}throw Error(j.error||'处理失败')}return await r.blob()}
+async function showSelected(){if(selected<0){ctx.clearRect(0,0,canvas.width,canvas.height);return}try{status('正在生成合并图预览…');const blob=await apiImage('/api/group-preview',{groups:[groups[selected]],settings:settings()});const url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{previewImg=img;draw();URL.revokeObjectURL(url);status(groups[selected].name+'：拖动白框选择放大区域')};img.src=url}catch(e){alert(e.message);status(e.message)}}
+function squareSide(){const px=Math.max(0,+$('square_size_px').value||0);if(px>0&&previewImg)return Math.min(canvas.width,canvas.height,px*canvas.width/previewImg.naturalWidth);const fraction=Math.max(.05,Math.min(.95,+$('square_size_fraction').value||.35));return Math.min(canvas.width,canvas.height)*fraction}
+function effectiveRoi(g){if($('roi_shape').value!=='square')return g.roi;const side=squareSide(),hx=side/(2*canvas.width),hy=side/(2*canvas.height);let cx=(g.roi[0]+g.roi[2])/2,cy=(g.roi[1]+g.roi[3])/2;cx=Math.max(hx,Math.min(1-hx,cx));cy=Math.max(hy,Math.min(1-hy,cy));return[cx-hx,cy-hy,cx+hx,cy+hy]}
+function draw(){if(!previewImg)return;const stage=$('stage'),scale=Math.min((stage.clientWidth-12)/previewImg.naturalWidth,(stage.clientHeight-12)/previewImg.naturalHeight,1);canvas.width=Math.round(previewImg.naturalWidth*scale);canvas.height=Math.round(previewImg.naturalHeight*scale);ctx.drawImage(previewImg,0,0,canvas.width,canvas.height);if(selected>=0&&$('zoom_mode').value!=='none'){const r=effectiveRoi(groups[selected]);ctx.strokeStyle='white';ctx.lineWidth=2;ctx.strokeRect(r[0]*canvas.width,r[1]*canvas.height,(r[2]-r[0])*canvas.width,(r[3]-r[1])*canvas.height)}}
+canvas.onpointerdown=e=>{if(selected<0||$('zoom_mode').value==='none')return;const r=canvas.getBoundingClientRect();drag=[Math.max(0,Math.min(canvas.width,e.clientX-r.left)),Math.max(0,Math.min(canvas.height,e.clientY-r.top))];canvas.setPointerCapture(e.pointerId)};
+canvas.onpointermove=e=>{if(!drag)return;draw();const r=canvas.getBoundingClientRect(),x=Math.max(0,Math.min(canvas.width,e.clientX-r.left)),y=Math.max(0,Math.min(canvas.height,e.clientY-r.top));ctx.strokeStyle='white';ctx.lineWidth=2;if($('roi_shape').value==='square'){const side=squareSide(),x0=Math.max(0,Math.min(canvas.width-side,x-side/2)),y0=Math.max(0,Math.min(canvas.height-side,y-side/2));ctx.strokeRect(x0,y0,side,side)}else ctx.strokeRect(drag[0],drag[1],x-drag[0],y-drag[1])};
+canvas.onpointerup=e=>{if(!drag)return;const r=canvas.getBoundingClientRect(),x=Math.max(0,Math.min(canvas.width,e.clientX-r.left)),y=Math.max(0,Math.min(canvas.height,e.clientY-r.top));if($('roi_shape').value==='square'){const side=squareSide(),x0=Math.max(0,Math.min(canvas.width-side,x-side/2)),y0=Math.max(0,Math.min(canvas.height-side,y-side/2));groups[selected].roi=[x0/canvas.width,y0/canvas.height,(x0+side)/canvas.width,(y0+side)/canvas.height]}else{const x0=Math.min(x,drag[0]),x1=Math.max(x,drag[0]),y0=Math.min(y,drag[1]),y1=Math.max(y,drag[1]);if(x1-x0>5&&y1-y0>5)groups[selected].roi=[x0/canvas.width,y0/canvas.height,x1/canvas.width,y1/canvas.height]}drag=null;draw()};
+async function fullPreview(){try{status('正在生成整版预览…');const blob=await apiImage('/api/figure-preview',{groups,settings:settings()});$('fullImage').src=URL.createObjectURL(blob);$('fullPreview').style.display='flex';status('整版预览已生成，点击灰色区域关闭')}catch(e){alert(e.message);status(e.message)}}
+async function download(fmt){try{status('正在生成 '+fmt.toUpperCase()+'…');const blob=await apiImage('/api/export?format='+fmt,{groups,settings:settings()}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='immunofluorescence_figure.'+fmt;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);status('导出完成')}catch(e){alert(e.message);status(e.message)}}
+async function exitApp(){if(!confirm('退出 FluoroLayout？'))return;try{await fetch('/api/shutdown',{method:'POST'})}finally{document.body.innerHTML='<main style="display:flex;align-items:center;justify-content:center;height:100vh"><section class="card"><h1>FluoroLayout 已退出</h1><p>现在可以关闭此页面。</p></section></main>'}}
+window.onresize=draw;$('roi_shape').onchange=draw;$('square_size_fraction').oninput=draw;$('square_size_px').oninput=draw;$('zoom_mode').onchange=()=>{$('draw_roi').checked=$('zoom_mode').value!=='none';draw()};$('calibration_mode').onchange=updateCalibrationMode;for(const c of ['blue','green','red','brightfield'])$('f'+c).onchange=()=>{if($('f'+c).files[0])$('c'+c).checked=true};renderGroups();renderChannelOrder();updateCalibrationMode();
+</script></body></html>
